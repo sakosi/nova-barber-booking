@@ -1,0 +1,657 @@
+{
+  "name": "Nova Barber Studio — Booking API",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "nova-booking",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "https://YOUR-WEBSITE-DOMAIN"
+        }
+      },
+      "id": "a28432dd-eca6-4200-813b-1fe5e6c1d5bc",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "b1fe0ae7-3afe-4d82-b07e-a25370b6e138",
+              "name": "cutstomer_name ",
+              "value": "={{ String($json.body.customer_name ?? '').trim() }}",
+              "type": "string"
+            },
+            {
+              "id": "792b3ca2-4bcf-4d8b-aee8-6ad635e54423",
+              "name": "email",
+              "value": "={{ String($json.body.email ?? '').trim().toLowerCase() }}",
+              "type": "string"
+            },
+            {
+              "id": "f8287ddd-c5ef-4091-b12f-6b325d60a7a5",
+              "name": "phone",
+              "value": "={{ String($json.body.phone ?? '').trim() }}",
+              "type": "string"
+            },
+            {
+              "id": "600043c5-47b3-4642-a4ae-df719cf8df57",
+              "name": "service_code ",
+              "value": "={{ String($json.body.service_code ?? '').trim().toLowerCase() }}",
+              "type": "string"
+            },
+            {
+              "id": "3ed7e15d-79c5-444c-b431-3cd4db784313",
+              "name": "date",
+              "value": "={{ String($json.body.date ?? '').trim() }}",
+              "type": "string"
+            },
+            {
+              "id": "27393f0b-3b2e-48c5-a24b-e5dfb18ec6ac",
+              "name": "time",
+              "value": "={{ String($json.body.time ?? '').trim() }}",
+              "type": "string"
+            },
+            {
+              "id": "feb0cfa5-20bb-43bc-8044-b6b167cb43af",
+              "name": "timezone",
+              "value": "Asia/Almaty",
+              "type": "string"
+            },
+            {
+              "id": "6c81dd2a-ee88-4d84-ae81-2168c35135a5",
+              "name": "notes",
+              "value": "={{ String($json.body.notes ?? '').trim() }}",
+              "type": "string"
+            },
+            {
+              "id": "f89f8a51-a3d2-4c6b-8d4d-a3fd88615ef4",
+              "name": "created_at",
+              "value": "={{ $now.setZone('Asia/Almaty').toISO() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "7dd4587d-9d72-46d7-8579-a29a7e83c19a",
+      "name": "Normalize Booking",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        224,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEET_ID",
+          "mode": "id",
+          "cachedResultName": "Nova Barber studio-Booking Database"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1395556444,
+          "mode": "list",
+          "cachedResultName": "services"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "service_code",
+              "lookupValue": "={{ $json['service_code '] }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a4bf51c8-8b42-41ff-928e-9a50d34e2e7d",
+      "name": "Find Service",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        448,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const crypto = require('crypto');\n\n// Get original customer data from Webhook\nconst webhookData = $('Webhook').first().json;\nconst booking = webhookData.body ?? webhookData;\n\n// Get service returned by Google Sheets\nconst serviceRows = $input.all().map(item => item.json);\n\nconst requestedCode = String(\n  booking.service_code ?? ''\n).trim().toLowerCase();\n\nconst service = serviceRows.find(row =>\n  String(row.service_code ?? '').trim().toLowerCase() === requestedCode\n) ?? {};\n\nconst errors = [];\n\nconst name = String(booking.customer_name ?? '').trim();\nconst email = String(booking.email ?? '').trim().toLowerCase();\nconst phone = String(booking.phone ?? '').trim();\nconst serviceCode = String(booking.service_code ?? '').trim().toLowerCase();\nconst date = String(booking.date ?? '').trim();\nconst time = String(booking.time ?? '').trim();\nconst notes = String(booking.notes ?? '').trim();\n\nconst duration = Number(service.duration_minutes);\n\nif (!name) errors.push('Customer name is required');\n\nif (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)) {\n  errors.push('Invalid email address');\n}\n\nif (!/^\\+?[0-9][0-9\\s()-]{6,18}$/.test(phone)) {\n  errors.push('Invalid phone number');\n}\n\nif (!service.service_code || \n    String(service.service_code).trim().toLowerCase() !== serviceCode) {\n  errors.push('Selected service does not exist');\n}\n\nconst active = String(service.active ?? '').trim().toLowerCase();\n\nif (!['true', '1', 'yes'].includes(active)) {\n  errors.push('Selected service is unavailable');\n}\n\nif (!Number.isFinite(duration) || duration <= 0) {\n  errors.push('Invalid service duration');\n}\n\n// Validate date and time\nconst dateValid =\n  /^\\d{4}-\\d{2}-\\d{2}$/.test(date) &&\n  !Number.isNaN(Date.parse(`${date}T12:00:00Z`)) &&\n  new Date(`${date}T12:00:00Z`).toISOString().slice(0, 10) === date;\n\nconst timeValid = /^(?:[01]\\d|2[0-3]):(?:00|30)$/.test(time);\n\nif (!dateValid) errors.push('Date must use YYYY-MM-DD format');\nif (!timeValid) errors.push('Time must use HH:mm format');\n\nlet startMs = NaN;\nlet endMs = NaN;\n\nif (dateValid && timeValid && Number.isFinite(duration)) {\n  startMs = new Date(`${date}T${time}:00+05:00`).getTime();\n  endMs = startMs + duration * 60000;\n\n  const todayAstana = new Date(Date.now() + 5 * 60 * 60 * 1000)\n    .toISOString().slice(0, 10);\n\n  if (date < todayAstana || startMs <= Date.now()) {\n    errors.push('Appointment must be in the future');\n  }\n\n  // Sunday is closed\n  const dayOfWeek = new Date(`${date}T12:00:00Z`).getUTCDay();\n\n  if (dayOfWeek === 0) {\n    errors.push('The studio is closed on Sundays');\n  }\n\n  // Business hours: 10:00–20:00\n  const localEnd = new Date(endMs + 5 * 60 * 60 * 1000);\n  const startMinutes = Number(time.slice(0, 2)) * 60 +\n                       Number(time.slice(3, 5));\n  const endMinutes = localEnd.getUTCHours() * 60 +\n                     localEnd.getUTCMinutes();\n\n  const endLocalDate = localEnd.toISOString().slice(0, 10);\n\n  if (startMinutes < 600 || endMinutes > 1200 ||\n      endLocalDate !== date) {\n    errors.push('Appointment must fit within 10:00–20:00');\n  }\n}\n\nif (notes.length > 500) {\n  errors.push('Notes must not exceed 500 characters');\n}\n\nconst isValid = errors.length === 0;\n\nreturn [{\n  json: {\n    customer_name: name,\n    email,\n    phone,\n    service_code: serviceCode,\n    service: service.service_name || '',\n    duration_minutes: duration,\n    date,\n    time,\n    timezone: 'Asia/Almaty',\n    start_at: Number.isFinite(startMs)\n      ? new Date(startMs).toISOString()\n      : '',\n    end_at: Number.isFinite(endMs)\n      ? new Date(endMs).toISOString()\n      : '',\n    notes,\n    booking_id: crypto.randomUUID(),\n    management_token: crypto.randomBytes(32).toString('hex'),\n    status: 'confirmed',\n    created_at: new Date().toISOString(),\n    updated_at: new Date().toISOString(),\n    reminder_24h_sent: 'FALSE',\n    reminder_1h_sent: 'FALSE',\n    is_valid: isValid,\n    validation_error: errors.join('; ')\n  }\n}];\n\n"
+      },
+      "id": "f11a54f7-d596-4d94-9abb-c26ef718dba9",
+      "name": "Build booking",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "a4c4022f-e400-481d-9f82-7ad6b07695c0",
+              "leftValue": "={{ $json.is_valid }}",
+              "rightValue": "={{ $json.is_valid }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "1a704f96-c15f-46c1-852b-100980b5ee6f",
+      "name": "Valid booking?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        896,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "calendar",
+        "calendar": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_CALENDAR_ID",
+          "mode": "id",
+          "cachedResultName": "Nova Barber Studio — Appointments"
+        },
+        "timeMin": "={{ $json.start_at }}",
+        "timeMax": "={{ $json.end_at }}",
+        "options": {}
+      },
+      "id": "06c1a89c-65e0-4a4d-b502-03f82b9a45b1",
+      "name": "Get availability in a calendar",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        1120,
+        -96
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "4bcbb18d-976f-4bfe-b7de-6a6eca7ce24a",
+              "leftValue": "={{ $json.available }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "2e67068f-b055-4979-9119-717da6c602ee",
+      "name": "Slot available?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        1344,
+        -96
+      ]
+    },
+    {
+      "parameters": {
+        "calendar": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_CALENDAR_ID",
+          "mode": "id",
+          "cachedResultName": "Nova Barber Studio — Appointments"
+        },
+        "start": "={{ $('Build booking').item.json.start_at }}",
+        "end": "={{ $('Build booking').item.json.end_at }}",
+        "additionalFields": {
+          "description": "=Booking ID: {{ $('Build booking').item.json.booking_id }}\nPhone: {{ $('Build booking').item.json.phone }}\nEmail: {{ $('Build booking').item.json.email }}\nNotes: {{ $('Build booking').item.json.notes }}",
+          "summary": "={{ $('Build booking').item.json.service }} — {{ $('Build booking').item.json.customer_name }}"
+        }
+      },
+      "id": "9d2b5d4f-9937-42c8-8c0b-e08daff6bca2",
+      "name": "Create Appointment",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        1568,
+        -160
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEET_ID",
+          "mode": "id",
+          "cachedResultName": "Nova Barber studio-Booking Database"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Booking"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "booking_id": "={{ $('Build booking').first().json.booking_id }}",
+            "management_token": "={{ $('Build booking').first().json.management_token }}",
+            "customer_name": "={{ $('Build booking').first().json.customer_name }}",
+            "email": "={{ $('Build booking').first().json.email }}",
+            "phone": "={{ \"'\" + $('Build booking').first().json.phone }}",
+            "service": "={{ $('Build booking').first().json.service }}",
+            "duration_minutes": "={{ $('Build booking').first().json.duration_minutes }}",
+            "start_at": "={{ $('Build booking').first().json.start_at }}",
+            "end_at": "={{ $('Build booking').first().json.end_at }}",
+            "status": "confirmed",
+            "calendar_event_id": "={{ $('Create Appointment').first().json.id }}",
+            "created_at": "={{ $('Build booking').first().json.created_at }}",
+            "updated_at": "={{ $('Build booking').first().json.updated_at }}",
+            "reminder_24h_sent": "FALSE",
+            "reminder_1h_sent": "FALSE",
+            "notes": "={{ $('Build booking').first().json.notes }}"
+          },
+          "schema": [
+            {
+              "id": "booking_id",
+              "displayName": "booking_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "management_token",
+              "displayName": "management_token",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "customer_name",
+              "displayName": "customer_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "email",
+              "displayName": "email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "phone",
+              "displayName": "phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "service",
+              "displayName": "service",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "duration_minutes",
+              "displayName": "duration_minutes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "start_at",
+              "displayName": "start_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "end_at",
+              "displayName": "end_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "calendar_event_id",
+              "displayName": "calendar_event_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "updated_at",
+              "displayName": "updated_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "reminder_24h_sent",
+              "displayName": "reminder_24h_sent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "reminder_1h_sent",
+              "displayName": "reminder_1h_sent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "notes",
+              "displayName": "notes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "ddd2fce6-04f2-4a9b-9386-cd9dca05b5a3",
+      "name": "Save Booking",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1424,
+        -176
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\n  ok: true,\n  status: 'confirmed',\n  booking_id: $('Build booking').first().json.booking_id,\n  service: $('Build booking').first().json.service,\n  start_at: $('Build booking').first().json.start_at,\n  end_at: $('Build booking').first().json.end_at,\n  message: 'Your appointment has been confirmed!'\n} }}",
+        "options": {
+          "responseCode": 201
+        }
+      },
+      "id": "eb292564-aa53-44c5-afda-227848a3495f",
+      "name": "Booking Confirmed",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1648,
+        -176
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\n  ok: false,\n  code: 'SLOT_UNAVAILABLE',\n  message: 'This time slot is already booked. Please select another time.'\n} }}",
+        "options": {
+          "responseCode": 409
+        }
+      },
+      "id": "d3c973ea-a215-43bc-a074-ec1619577ad7",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1568,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\n  ok: false,\n  code: 'VALIDATION_ERROR',\n  message: $json.validation_error\n} }}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "9cda49d0-cf36-4a79-ae41-a21ad6bc0ab8",
+      "name": "Respond Invalid Booking",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1168,
+        0
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Booking",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Booking": {
+      "main": [
+        [
+          {
+            "node": "Find Service",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Service": {
+      "main": [
+        [
+          {
+            "node": "Build booking",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build booking": {
+      "main": [
+        [
+          {
+            "node": "Valid booking?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Valid booking?": {
+      "main": [
+        [
+          {
+            "node": "Get availability in a calendar",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Invalid Booking",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get availability in a calendar": {
+      "main": [
+        [
+          {
+            "node": "Slot available?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slot available?": {
+      "main": [
+        [
+          {
+            "node": "Create Appointment",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Appointment": {
+      "main": [
+        [
+          {
+            "node": "Save Booking",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Booking": {
+      "main": [
+        [
+          {
+            "node": "Booking Confirmed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "nodeGroups": [
+    {
+      "id": "5503088b-04f2-48b5-9da0-952200f450af",
+      "name": "Validate booking request",
+      "nodeIds": [
+        "7dd4587d-9d72-46d7-8579-a29a7e83c19a",
+        "a4bf51c8-8b42-41ff-928e-9a50d34e2e7d",
+        "f11a54f7-d596-4d94-9abb-c26ef718dba9"
+      ],
+      "description": "Cleans the submitted form, looks up the service, and checks fields, business hours and duration"
+    },
+    {
+      "id": "47d1a2ea-59fb-4721-9d77-b0ba2998d1aa",
+      "name": "Reserve the time slot",
+      "nodeIds": [
+        "1a704f96-c15f-46c1-852b-100980b5ee6f",
+        "9cda49d0-cf36-4a79-ae41-a21ad6bc0ab8",
+        "06c1a89c-65e0-4a4d-b502-03f82b9a45b1",
+        "2e67068f-b055-4979-9119-717da6c602ee",
+        "9d2b5d4f-9937-42c8-8c0b-e08daff6bca2",
+        "d3c973ea-a215-43bc-a074-ec1619577ad7"
+      ],
+      "description": "Rejects invalid requests (400), else checks the calendar and books the slot, or replies 409 if taken"
+    },
+    {
+      "id": "3d0d95ce-3462-49fe-b2aa-9d62ebf356b1",
+      "name": "Confirm the booking",
+      "nodeIds": [
+        "ddd2fce6-04f2-4a9b-9386-cd9dca05b5a3",
+        "eb292564-aa53-44c5-afda-227848a3495f"
+      ],
+      "description": "Logs the appointment to the bookings sheet, then replies 201 to the website"
+    }
+  ],
+  "tags": []
+}
