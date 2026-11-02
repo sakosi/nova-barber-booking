@@ -94,8 +94,7 @@ nova-barber-booking/
 ├── README.md
 ├── workflow/
 ├── screenshots/
-└── docs/
-```
+
 
 ## Testing
 
